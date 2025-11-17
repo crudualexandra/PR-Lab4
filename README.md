@@ -306,6 +306,8 @@ Followers matching dump:  0
 > 
 
 ## TEST RESULTS FOR ALL
+<img width="4168" height="2953" alt="image" src="https://github.com/user-attachments/assets/a2acbf4a-5afe-472b-87fd-74000c950cf4" />
+
 
 | **WRITE_QUORUM** | **Successful** | **Failed** | **Avg latency (ms)** | **Throughput (writes/s)** | **Followers matching dump** |
 | --- | --- | --- | --- | --- | --- |
