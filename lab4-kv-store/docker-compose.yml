@@ -1,0 +1,60 @@
+services:
+  leader:
+    build: .
+    container_name: kv-leader
+    environment:
+      ROLE: "leader"
+      PORT: "5000"
+      # followers' URLs inside docker network
+      FOLLOWERS: "http://f1:5000,http://f2:5000,http://f3:5000,http://f4:5000,http://f5:5000"
+      WRITE_QUORUM: "5"          # change 1..5 
+      MIN_DELAY_MS: "0.1"        # ~0.1 ms
+      MAX_DELAY_MS: "10.0"       # ~10 ms
+      WRITE_TIMEOUT_SEC: "1.0"
+    ports:
+      - "5000:5000"              # expose leader on localhost:5000
+
+  f1:
+    build: .
+    container_name: kv-f1
+    environment:
+      ROLE: "follower"
+      PORT: "5000"
+    ports:
+      - "5001:5000"
+
+  f2:
+    build: .
+    container_name: kv-f2
+    environment:
+      ROLE: "follower"
+      PORT: "5000"
+    ports:
+      - "5002:5000"
+
+  f3:
+    build: .
+    container_name: kv-f3
+    environment:
+      ROLE: "follower"
+      PORT: "5000"
+    ports:
+      - "5003:5000"
+
+  f4:
+    build: .
+    container_name: kv-f4
+    environment:
+      ROLE: "follower"
+      PORT: "5000"
+    ports:
+      - "5004:5000"
+
+  f5:
+    build: .
+    container_name: kv-f5
+    environment:
+      ROLE: "follower"
+      PORT: "5000"
+    ports:
+      - "5005:5000"
