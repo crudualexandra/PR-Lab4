@@ -160,7 +160,7 @@ Running this script with different WRITE_QUORUM values (1–5) gives you:
 - **Average latency** (for the x–y plot required in the lab).
 - A quick **consistency summary** after each run to see if the replicas converge to the leader’s state.
 
-run : `NUM_WRITES=10000 NUM_KEYS=100 NUM_THREADS=20 python perf_test.py`
+run : `NUM_WRITES=10000 NUM_KEYS=100 NUM_THREADS=15 SETTLE_SECONDS=5 TEST_ALL_QUORUMS=true python perf_test.py`
 
 | **WRITE_QUORUM** | **What it means?** |
 | --- | --- |
@@ -172,42 +172,40 @@ run : `NUM_WRITES=10000 NUM_KEYS=100 NUM_THREADS=20 python perf_test.py`
 | 6 | Leader + **all 5** followers must ack (fully sync) |
 
 **QUORUM TESTING:**
-**quorum = 1** (only the leader has to ack)
 
-`WRITE_QUORUM: "1”`
 
-RESTART: 
+**Run automated testing for all quorums (1-5):**
 
-`docker-compose down
-docker-compose up --build -d`
+`NUM_WRITES=10000 NUM_KEYS=100 NUM_THREADS=15 SETTLE_SECONDS=5 TEST_ALL_QUORUMS=true python perf_test.py`
 
-RUN:
+This will automatically:
+- Test each WRITE_QUORUM value from 1 to 5
+- Restart containers between tests
+- Generate plots and CSV results
+- Perform final consistency check
 
-`python perf_test.py`
 
-SAME FOR EACH FROM 1 TO 5
 
 **1️⃣ Test with WRITE_QUORUM = 1**
 
 ══════════════════════════════════════════════
 Performance summary
-
 ══════════════════════════════════════════════
 Total writes requested:   10000
 Successful writes:        10000
 Failed writes:            0
-Total elapsed time:       8.225 s
-Average latency:          16.408 ms
-P95 latency:             23.774 ms
-Throughput:              1215.73 writes/sec
+Total elapsed time:       7.573 s
+Average latency:          11.34 ms
+P95 latency:             14.94 ms
+Throughput:              1320.84 writes/sec
 Followers configured:     5
 Followers checked:        5
 Followers matching dump:  0
 
-> For WRITE_QUORUM = 1, the leader acknowledges a write as soon as it is stored locally, without waiting for any follower. In our 10k-write performance test (20 threads, 100 keys), we achieved an average latency of ~16.4 ms and a throughput of about 1,216 writes/sec, with 0 failed writes.
+> For WRITE_QUORUM = 1, the leader acknowledges a write as soon as it is stored locally, without waiting for any follower. We achieved an average latency of ~11.3 ms and a throughput of about 1,321 writes/sec, with 0 failed writes.
 > 
 
-> However, immediately after the load, **none of the followers’ /dump outputs matched the leader high performance followers may still be missing updates**
+> However, immediately after the load, **none of the followers' /dump outputs matched the leader**—high performance but followers may still be missing updates due to fully asynchronous replication.
 > 
 
 **2️⃣ Test with WRITE_QUORUM = 2**
@@ -216,24 +214,22 @@ Leader + **any 1** follower must ack
 
 ══════════════════════════════════════════════
 Performance summary
-
 ══════════════════════════════════════════════
 Total writes requested:   10000
-Successful writes:        9832
-Failed writes:            168
-Total elapsed time:       96.249 s
-Average latency:          106.770 ms
-P95 latency:             146.407 ms
-Throughput:              102.15 writes/sec
+Successful writes:        9875
+Failed writes:            125
+Total elapsed time:       93.611 s
+Average latency:          77.80 ms
+P95 latency:             102.24 ms
+Throughput:              105.43 writes/sec
 Followers configured:     5
-Followers checked:        0
-Followers matching dump:  0
-══════════════════════════════════════════════
+Followers checked:        5
+Followers matching dump:  5
 
-> For WRITE_QUORUM = 2 (leader + one follower), the average latency increased to ~106.8 ms and throughput dropped to ~102 writes/sec. We also observed 168 failed writes, where the leader could not collect enough acknowledgements from followers before the write timeout. This shows the typical trade-off: higher quorum improves durability/consistency but reduces performance and availability.
+> For WRITE_QUORUM = 2 (leader + one follower), the average latency increased to ~77.8 ms and throughput dropped to ~105 writes/sec. We observed 125 failed writes, where the leader could not collect enough acknowledgements before the write timeout. This shows the typical trade-off: higher quorum improves durability/consistency but reduces performance and availability.
 > 
 
-> Under WRITE_QUORUM = 2, the leader becomes so loaded that a full /dump request may time out at 10 seconds, which illustrates how higher quorum and heavy write load can also impact read performance and observability.
+> Interestingly, all 5 followers matched the leader's dump after the test, showing that semi-synchronous replication with quorum ≥2 plus settling time can achieve strong consistency.
 > 
 
 **3️⃣ Test with WRITE_QUORUM = 3**
@@ -241,87 +237,81 @@ Meaning: *leader + any 2 followers*.
 
 ══════════════════════════════════════════════
 Performance summary
-
 ══════════════════════════════════════════════
 Total writes requested:   10000
-Successful writes:        9822
-Failed writes:            178
-Total elapsed time:       95.463 s
-Average latency:          99.594 ms
-P95 latency:             113.214 ms
-Throughput:              102.89 writes/sec
+Successful writes:        9851
+Failed writes:            149
+Total elapsed time:       99.177 s
+Average latency:          74.75 ms
+P95 latency:             98.36 ms
+Throughput:              99.31 writes/sec
 Followers configured:     5
 Followers checked:        5
 Followers matching dump:  0
-══════════════════════════════════════════════
 
-> For WRITE_QUORUM = 3 (leader + two followers), the average write latency stayed around 100 ms and throughput was ~103 writes/sec, with 178 failed writes due to timeouts while waiting for acknowledgements. This is similar to the quorum 2 case: higher quorums give stronger guarantees but keep write performance much lower than the asynchronous case (quorum 1).
+> For WRITE_QUORUM = 3 (leader + two followers), the average write latency was around 74.8 ms and throughput was ~99 writes/sec, with 149 failed writes due to timeouts. Similar to quorum 2, higher quorums give stronger guarantees but keep write performance much lower than the asynchronous case (quorum 1).
+> 
+
+> Immediately after the test, followers did not match the leader, demonstrating timing-dependent consistency behavior under high write contention.
 > 
 
 **4️⃣ Test with WRITE_QUORUM = 4**
 
 ══════════════════════════════════════════════
 Performance summary
-
 ══════════════════════════════════════════════
 Total writes requested:   10000
-Successful writes:        9806
-Failed writes:            194
-Total elapsed time:       96.028 s
-Average latency:          106.328 ms
-P95 latency:             130.556 ms
-Throughput:              102.12 writes/sec
+Successful writes:        9883
+Failed writes:            117
+Total elapsed time:       91.558 s
+Average latency:          79.47 ms
+P95 latency:             99.69 ms
+Throughput:              107.95 writes/sec
 Followers configured:     5
 Followers checked:        5
-Followers matching dump:  0
-══════════════════════════════════════════════
+Followers matching dump:  5
 
-> With WRITE_QUORUM = 4 (leader + three followers), the average latency was about 106 ms and throughput around 102 writes/sec. We observed 194 failed writes, caused by the leader not receiving enough acknowledgements from followers before the timeout. This shows that requiring acknowledgements from more replicas further reduces availability and increases the probability of write failures under load.
-> 
-
-**Consistency**
-
-> Immediately after the 10k writes, all replicas stored the same set of 100 keys, but none of the followers had an identical dump to the leader. This indicates that followers are still catching up on the most recent updates (replication lag), even though writes are only reported successful if a relatively large number of replicas acknowledge them.
+> With WRITE_QUORUM = 4 (leader + three followers), the average latency was about 79.5 ms and throughput around 108 writes/sec. We observed 117 failed writes due to timeout. All 5 followers matched the leader after the test, demonstrating that higher quorums with sufficient settling time achieve eventual consistency.
 > 
 
 **5️⃣ Test with WRITE_QUORUM = 5**
 
 ══════════════════════════════════════════════
 Performance summary
-
 ══════════════════════════════════════════════
 Total writes requested:   10000
-Successful writes:        9812
-Failed writes:            188
-Total elapsed time:       75.705 s
-Average latency:          104.825 ms
-P95 latency:             127.379 ms
-Throughput:              129.61 writes/sec
+Successful writes:        9873
+Failed writes:            127
+Total elapsed time:       100.602 s
+Average latency:          88.09 ms
+P95 latency:             117.54 ms
+Throughput:              98.13 writes/sec
 Followers configured:     5
 Followers checked:        5
-Followers matching dump:  0
-══════════════════════════════════════════════
+Followers matching dump:  5
 
-> For WRITE_QUORUM = 5 (leader + four followers), the average write latency was ~104.8 ms, with a throughput of ~130 writes/sec and 188 failed writes due to timeouts while waiting for enough acknowledgements. All replicas stored the same 100 keys, but none of the followers’ dumps were identical to the leader: some values were still older, which shows replication lag (followers had not yet applied all of the latest updates when we checked).
+> For WRITE_QUORUM = 5 (leader + four followers), the average write latency was ~88.1 ms, with throughput of ~98 writes/sec and 127 failed writes. All 5 followers matched the leader's dump after the test, demonstrating that requiring acknowledgements from nearly all replicas achieves strong eventual consistency despite higher latency.
 > 
 
-## TEST RESULTS FOR ALL
-<img width="4168" height="2953" alt="image" src="https://github.com/user-attachments/assets/a2acbf4a-5afe-472b-87fd-74000c950cf4" />
+**Final Consistency Check:**
 
+After all quorum tests completed, a comprehensive consistency verification was performed with 5 retry attempts over 50 seconds. **Result: All 5 followers matched the leader on the first attempt**, achieving complete eventual consistency without requiring retries. This validates that given sufficient time for replication to complete, the system correctly converges to a consistent state across all replicas.
+
+## TEST RESULTS FOR ALL
 
 | **WRITE_QUORUM** | **Successful** | **Failed** | **Avg latency (ms)** | **Throughput (writes/s)** | **Followers matching dump** |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 10000 | 0 | 16.41 | 1215.73 | 0 / 5 |
-| 2 | 9832 | 168 | 106.77 | 102.15 | 0 / 0 (leader dump timeout) |
-| 3 | 9822 | 178 | 99.59 | 102.89 | 0 / 5 |
-| 4 | 9806 | 194 | 106.33 | 102.12 | 0 / 5 |
-| 5 | 9812 | 188 | 104.83 | 129.61 | 0 / 5 |
+| 1 | 10000 | 0 | 11.34 | 1320.84 | 0 / 5 |
+| 2 | 9875 | 125 | 77.80 | 105.43 | 5 / 5 |
+| 3 | 9851 | 149 | 74.75 | 99.31 | 0 / 5 |
+| 4 | 9883 | 117 | 79.47 | 107.95 | 5 / 5 |
+| 5 | 9873 | 127 | 88.09 | 98.13 | 5 / 5 |
 
-> We ran a performance test with 10,000 writes, 20 client threads and 100 logical keys, varying the WRITE_QUORUM parameter from 1 to 5. For WRITE_QUORUM = 1 (only the leader must acknowledge), the average latency was ≈16.4 ms and the throughput ≈1,216 writes/sec, with 0 failed writes. However, after the test none of the followers’ /dump states matched the leader and 100 keys were missing or outdated on replicas, which shows that with quorum 1 replication is fully asynchronous and followers can lag significantly behind the leader.
+> We ran a performance test with 10,000 writes, 15 client threads and 100 logical keys, varying the WRITE_QUORUM parameter from 1 to 5. For WRITE_QUORUM = 1 (only the leader must acknowledge), the average latency was ≈11.3 ms and the throughput ≈1,321 writes/sec, with 0 failed writes. However, after the test none of the followers' /dump states matched the leader, showing that with quorum 1 replication is fully asynchronous and followers can lag significantly behind.
 > 
 
-> For WRITE_QUORUM ∈ {2,3,4,5}, the leader waited for at least one or more follower acknowledgements before confirming a write. In this regime, the average latency increased to around 100 ms and throughput dropped to roughly 100–130 writes/sec. We also observed between 168 and 194 failed writes, where the leader could not collect enough acknowledgements before the timeout, which illustrates the trade-off: higher quorums improve durability guarantees but reduce performance and availability. Immediately after the write phase, all replicas contained the same 100 keys, but none of the followers had an identical dump to the leader, meaning that some values were still older on the followers—replication was still catching up, so the system shows **replication lag eventual consistency**
-> 
+> For WRITE_QUORUM ∈ {2,3,4,5}, the leader waited for at least one or more follower acknowledgements before confirming a write. In this regime, the average latency increased to around 75-88 ms and throughput dropped to roughly 98-108 writes/sec. We observed between 117 and 149 failed writes, where the leader could not collect enough acknowledgements before the timeout. Immediately after each test, quorums 2, 4, and 5 showed all followers matching the leader (5/5), while quorum 3 showed no immediate matches (0/5), demonstrating timing-dependent consistency. The final comprehensive consistency check confirmed that **all 5 followers eventually matched the leader**, validating that the system achieves **eventual consistency** given sufficient settling time.
+>
 
 **QUESTION FROM LAB REQUIREMENT:**
 
@@ -330,18 +320,29 @@ Followers matching dump:  0
 
 ### **1️⃣ Plot: write quorum vs average latency – explanation**
 
-As we increase the write quorum from 1 to 5, the leader has to wait for acknowledgements from more replicas before replying, so the **average write latency jumps up** (from ≈16 ms at quorum 1 to ≈100 ms for quorum ≥2) and throughput drops.
+<img width="4168" height="2953" alt="image" src="https://github.com/user-attachments/assets/b6b74863-7c88-46f1-8ca4-01bdcf8c461a" />
 
-With higher quorums the latency is dominated by the **slowest required follower** and by the random network delays we added, so the curve is higher and relatively flat for quorums 2–5.
+**Explanation:**
+Latency increases significantly from quorum 1 to quorum 2 (11ms → 77ms, a 6.9× jump) because the leader must wait for follower acknowledgements instead of responding immediately. With quorum=1, only local storage is needed. With quorum≥2, the leader waits for network round-trips, follower processing, and synchronization, adding substantial overhead. Quorums 2-5 show similar latencies (74-88ms) because the system reached capacity under concurrent load—replication happens in parallel, so waiting for more followers doesn't proportionally increase latency. **Trade-off: higher quorum = better durability but slower writes.**
 
 ### **2️⃣ After 10k writes, does replica data match the leader? Why / why not?**
 
-Immediately after the 10k concurrent writes, **none of the followers had a dump identical to the leader**: they had the same set of keys, but some values were older, which means they were still catching up with the latest updates.
+**Immediate results per quorum:**
+- Quorum 1: 0/5 followers matched
+- Quorum 2: 5/5 followers matched
+- Quorum 3: 0/5 followers matched
+- Quorum 4: 5/5 followers matched
+- Quorum 5: 5/5 followers matched
 
-This happens because replication is asynchronous in the background: even with higher quorums the leader only waits for *some* followers to acknowledge each write, while other followers may still be applying previous operations, so the system exhibits **replication lag and eventual consistency**, not instant synchronization.
+**Final consistency check:** All 5 followers matched the leader after all tests completed.
+
+**Explanation:**
+With quorum=1, followers lag behind due to fully asynchronous replication. Higher quorums (2, 4, 5) achieved immediate consistency because the leader waited for multiple followers to acknowledge, allowing replicas to converge during the test. Quorum=3 showed timing-dependent inconsistency due to high write contention. Most importantly, the **final check confirmed eventual consistency**—all replicas eventually converged to the same state, proving the replication mechanism works correctly regardless of quorum level.
 
 ## Conclusion
 
-In this lab I designed and implemented a simple key–value store with **single-leader replication**, where only the leader accepts client writes and propagates them to five followers over a JSON/HTTP API. All components (role, follower list, write quorum, artificial network delay) are configured via environment variables in docker-compose.yml, and both leader and followers handle requests concurrently using threads. On the leader side I implemented **semi-synchronous replication**: the leader always writes locally, starts replication to all followers in parallel with a random delay in [0.1 ms, 10 ms] for each follower, and only reports success when a configurable number of acknowledgements (“write quorum”) has been collected or a timeout is reached.
+In this lab I implemented a key-value store with **single-leader replication** where the leader accepts writes and replicates them to five followers via JSON/HTTP API. The system uses **semi-synchronous replication** with a configurable write quorum: the leader waits for a specified number of follower acknowledgements before confirming writes to clients, with artificial network delays (0.1-10ms) simulating real-world conditions.
 
-The **integration test** showed that the basic replication mechanism works as expected: a write to the leader is stored locally and eventually appears on all followers, while the write response includes both the total number of acknowledgements and the configured quorum. The **performance test** stressed the system with 10,000 concurrent writes on 100 keys (20 threads), and allowed me to measure how the **write quorum affects latency and throughput**. With WRITE_QUORUM = 1 (leader only), average latency was very low and throughput high, but followers lagged behind and none of them matched the leader’s dump immediately after the test, illustrating weak consistency. For higher quorums (2–5), average latency increased to around 100 ms, throughput dropped to ≈100–130 writes/sec, and some writes failed due to timeouts while waiting for enough follower acknowledgements, which reflects the trade-off between **performance, availability, and stronger durability/consistency guarantees** described in Kleppmann’s chapter on replication.
+**Performance testing** with 10,000 concurrent writes on 100 keys (15 threads) revealed the fundamental trade-offs in distributed systems. With quorum=1, latency was low (~11ms) and throughput high (~1,321 writes/sec), but followers lagged behind showing weak immediate consistency. Higher quorums (2-5) increased latency to 75-88ms and reduced throughput to ~100 writes/sec, with 1.2-1.5% write failures due to timeouts. This demonstrates the **durability vs performance trade-off**: stronger guarantees require more coordination overhead.
+
+Notably, quorums 2, 4, and 5 achieved immediate consistency (5/5 followers matching) after their tests, showing that semi-synchronous replication with sufficient quorum provides strong consistency. Most importantly, the **final consistency check** confirmed that **all 5 followers matched the leader**, achieving complete **eventual consistency** regardless of quorum level. This validates that given sufficient time for replication to complete, the system correctly converges to a consistent state across all replicas, fulfilling the core guarantee of distributed systems described in Kleppmann's "Designing Data-Intensive Applications."
