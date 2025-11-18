@@ -164,12 +164,12 @@ run : `NUM_WRITES=10000 NUM_KEYS=100 NUM_THREADS=15 SETTLE_SECONDS=5 TEST_ALL_QU
 
 | **WRITE_QUORUM** | **What it means?** |
 | --- | --- |
-| 1 | Only the leader must ack → followers are fully async |
-| 2 | Leader + **any 1** follower must ack |
-| 3 | Leader + **any 2** followers must ack *(your current setting)* |
-| 4 | Leader + **any 3** followers must ack |
-| 5 | Leader + **any 4** followers must ack |
-| 6 | Leader + **all 5** followers must ack (fully sync) |
+
+| 1 | Leader + **any 1** follower must ack |
+| 2 | Leader + **any 2** followers must ack *(your current setting)* |
+| 3 | Leader + **any 3** followers must ack |
+| 4 | Leader + **any 4** followers must ack |
+| 5 | Leader + **all 5** followers must ack (fully sync) |
 
 **QUORUM TESTING:**
 
